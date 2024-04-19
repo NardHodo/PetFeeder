@@ -1,5 +1,6 @@
 package com.example.iotcontroller;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 
@@ -13,13 +14,11 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkRequest;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import java.io.IOException;
+import java.util.Objects;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -27,13 +26,12 @@ import okhttp3.Response;
 
 public class MainActivity extends AppCompatActivity {
 
-    Button btnGREEN, btnBLUE, btnRED, btnManage, btnCancel, btnOk;
-    TextView txtRES;
+    Button btnGREEN, btnBLUE, btnRED, btnManage, btnCancel;
     Dialog dispenseDialog;
 
-    LinearLayout dialog_box;
+//    LinearLayout dialog_box;
 
-    private OkHttpClient client = new OkHttpClient();
+    private final OkHttpClient client = new OkHttpClient();
 
 
     @SuppressLint("MissingInflatedId")
@@ -44,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
 
 
 
+        //region Helps the app to communicate with ESP8266
         ConnectivityManager connManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkRequest.Builder builder = new NetworkRequest.Builder();
         builder.addTransportType(NetworkCapabilities.TRANSPORT_WIFI);
@@ -51,100 +50,74 @@ public class MainActivity extends AppCompatActivity {
         NetworkRequest request = builder.build();
         connManager.requestNetwork(request, new ConnectivityManager.NetworkCallback() {
             @Override
-            public void onAvailable(Network network) {
+            public void onAvailable(@NonNull Network network) {
                 connManager.bindProcessToNetwork(network);
             }
         });
+        //endregion
 
 
+        //region Declaration
         btnBLUE = findViewById(R.id.btnBLUE);
         btnGREEN = findViewById(R.id.btnGREEN);
         btnRED = findViewById(R.id.btnRED);
         btnManage = findViewById(R.id.btnManage);
+        //endregion
 
 
         btnManage.setBackgroundColor(ContextCompat.getColor(this, R.color.manage_button));
         btnManage.setTextColor(ContextCompat.getColor(this, R.color.black));
 
-        //Dialog Box Functionality
+
+        //region Dialog Box Functionality
         dispenseDialog = new Dialog(MainActivity.this);
         dispenseDialog.setContentView(R.layout.activity_dispense_dialog_box);
         btnCancel = dispenseDialog.findViewById(R.id.btnCancelDispense);
-        dispenseDialog.getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        Objects.requireNonNull(dispenseDialog.getWindow()).setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         dispenseDialog.setCancelable(false);
+        //endregion
 
-        btnRED.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                sendCommand("red");
-            }
+
+
+        btnCancel.setOnClickListener(view -> dispenseDialog.dismiss());
+
+        btnManage.setOnClickListener(view ->
+        {
+            Intent viewSchedule = new Intent(MainActivity.this, Schedule_View.class);
+            startActivity(viewSchedule);
         });
-
-
-        btnGREEN.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                dispenseDialog.show();
-            }
-        });
-
-
-        btnBLUE.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                sendCommand("blue");
-
-            }
-        });
-
-        btnCancel.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                dispenseDialog.dismiss();
-            }
-        });
-
-        btnManage.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent viewSchedule = new Intent(MainActivity.this, Schedule_View.class);
-                startActivity(viewSchedule);
-            }
-        });
-
-
-
-
+        //region ESP8266 Communication Functions
+        btnRED.setOnClickListener(view -> sendCommand("red"));
+        btnGREEN.setOnClickListener(view -> sendCommand("green"));
+        btnBLUE.setOnClickListener(view -> sendCommand("blue"));
+        //endregion
     }
 
+
     public void sendCommand(String cmd) {
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                String command = "http://192.168.4.1/" + cmd;
-                Log.d("Command------------------------------------------", command);
-                Request request = new Request.Builder().url(command).build();
-                try {
-                    Response response = client.newCall(request).execute();
-                    String myResponse = response.body().string();
-                    final String cleanResponse = myResponse.replaceAll("\\<.*?\\>", ""); // remove HTML tags
-                    cleanResponse.replace("\n", ""); // remove all new line characters
-                    cleanResponse.replace("\r", ""); // remove all carriage characters
-                    cleanResponse.replace(" ", ""); // removes all space characters
-                    cleanResponse.replace("\t", ""); // removes all tab characters
-                    cleanResponse.trim();
-                    Log.d("Response  = ", cleanResponse);
+        new Thread(() -> {
+            String command = "http://192.168.4.1/" + cmd;
+            Log.d("Command------------------------------------------", command);
+            Request request = new Request.Builder().url(command).build();
+            try {
+                Response response = client.newCall(request).execute();
+                assert response.body() != null;
+                String myResponse = response.body().string();
+                final String cleanResponse; // remove HTML tags
+                cleanResponse = myResponse.replaceAll("<.*?>", "");
+                cleanResponse.replace("\n", ""); // remove all new line characters
+                cleanResponse.replace("\r", ""); // remove all carriage characters
+                cleanResponse.replace(" ", ""); // removes all space characters
+                cleanResponse.replace("\t", ""); // removes all tab characters
+                cleanResponse.trim();
+                Log.d("Response  = ", cleanResponse);
 
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            txtRES.setText(cleanResponse);
-                        }
-                    });
+                runOnUiThread(() -> {
+//                            txtRES.setText(cleanResponse);
+                });
 
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+            } catch (IOException e) {
+                e.printStackTrace();
             }
         }).start();
     }
